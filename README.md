@@ -1,5 +1,7 @@
 # handover-doc
 
+**简体中文** | [English](./README.en.md)
+
 > 一个通用 Agent Skill：分析任意前端 / 后端 / 全栈项目的 **Git 历史与本地文件**，一键生成带交互式思维导图的**交接文档**（单一 HTML 文件，可直接分享、打印、导出 PDF）。
 
 面向"人走活还在"的场景：离职交接、项目移交、接手人快速上手。
@@ -90,7 +92,8 @@ git clone https://github.com/WhatMing/handover-doc.git ~/.trae-cn/skills/handove
 handover-doc/
 ├─ SKILL.md         # 技能定义：定位、六步工作流、相关人员必填规则、安全红线、质量要求
 ├─ template.html    # 交接文档 HTML 模板：样式 + 思维导图 + 初始化与兜底逻辑
-├─ README.md
+├─ README.md        # 中文说明
+├─ README.en.md     # 英文说明
 └─ LICENSE
 ```
 
