@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<!--
+  文件名：template.html
+  创建时间：2026-10-30（v1.1：思维导图改为纯本地自包含组件，章节按接手优先级重排）
+  2026-11-02（v1.2：思维导图更换为 simple-mind-map 组件，资源经 BootCDN 加载）
+  2026-11-02（v1.3：导图库改 defer 异步加载并置文档末尾，库慢/不可达不再阻塞正文渲染，导图区加加载占位与失败兜底）
+  作者：handover-doc 技能
+  整体功能：前后端通用交接文档 HTML 模板。
+  使用方式：复制本模板到目标项目 → 替换所有（填写：xxx）占位内容与示例数据 →
+           将思维导图大纲填入脚本区 MIND_DATA 树形对象 → 另存为 交接文档-<项目名>.html 输出到项目根目录。
+  注意：思维导图使用 simple-mind-map 组件（UMD 版），资源固定经 BootCDN 加载，
+       查看文档需能访问 cdn.bootcdn.net；除导图库外文档零网络依赖。
+       导图库（约 6.5MB）必须以 <script defer> 置于 </body> 前，严禁在文档中段同步引入，
+       否则会中断 HTML 解析导致后续章节长时间不渲染；初始化脚本轮询等待库就绪后再绘制。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交接文档 - （填写：项目名）</title>
+<style>
+:root{
+  --ink:#1c2430; --muted:#67707e; --accent:#2f54c7; --accent-deep:#20336f;
+  --accent-soft:#eef2fd; --line:#e4e8ef; --card:#fff; --bg:#f6f7fa;
+  --ok:#15803d; --warn:#b45309; --danger:#b42318; --code:#f4f5f8;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+  font-size:15px;line-height:1.85}
+a{color:var(--accent);text-decoration:none}
+code{font-family:Consolas,"Courier New",monospace;font-size:13px;background:var(--code);
+  border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+.mono{font-family:Consolas,"Courier New",monospace;font-size:12.5px;color:var(--muted)}
+
+/* ===== 页头 ===== */
+.hero{background:linear-gradient(135deg,var(--accent-deep),var(--accent));color:#fff}
+.hero-inner{max-width:1280px;margin:0 auto;padding:44px 28px 36px}
+.hero-kicker{font-size:12.5px;letter-spacing:5px;opacity:.7;margin:0 0 6px}
+.hero h1{margin:0 0 8px;font-size:34px;letter-spacing:1px}
+.hero-sub{margin:0 0 24px;opacity:.85;max-width:820px}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 24px;font-size:13.5px}
+.meta span{display:block;opacity:.65;font-size:12px}
+.meta b{font-weight:600}
+.print-btn{margin-top:22px;background:rgba(255,255,255,.14);color:#fff;
+  border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:8px 24px;
+  cursor:pointer;font-size:14px}
+.print-btn:hover{background:rgba(255,255,255,.26)}
+
+/* ===== 布局 ===== */
+.layout{max-width:1280px;margin:0 auto;display:grid;
+  grid-template-columns:230px minmax(0,1fr);gap:26px;padding:26px 28px}
+.toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;
+  padding:20px 6px 20px 0;font-size:13.5px}
+.toc p{margin:0 0 6px;padding-left:12px;color:var(--muted);font-size:12px;letter-spacing:2px}
+.toc a{display:block;padding:5px 12px;border-left:2px solid transparent;color:var(--muted)}
+.toc a:hover{color:var(--accent)}
+.toc a.active{color:var(--accent);border-left-color:var(--accent);
+  background:var(--accent-soft);font-weight:600}
+main{min-width:0}
+
+/* ===== 章节 ===== */
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:28px 34px;margin-bottom:24px}
+main{counter-reset:sec}
+section h2{font-size:21px;margin:0 0 18px;padding-bottom:12px;
+  border-bottom:2px solid var(--line);letter-spacing:.5px}
+section h2::before{counter-increment:sec;content:counter(sec,decimal-leading-zero);
+  color:var(--accent);margin-right:12px;font-variant-numeric:tabular-nums;
+  font-family:Consolas,monospace}
+section h3{font-size:16.5px;margin:26px 0 10px;color:var(--accent-deep)}
+.lead{color:var(--muted);margin-top:-6px}
+
+/* ===== 表格 ===== */
+table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:13.8px}
+th{background:var(--accent-soft);color:var(--accent-deep);text-align:left;font-weight:600}
+th,td{border:1px solid var(--line);padding:8px 12px;vertical-align:top}
+tbody tr:nth-child(even){background:#fafbfd}
+
+/* ===== 徽标 ===== */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 18px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;
+  padding:4px 14px;font-size:13px}
+.chip b{color:var(--accent);margin-right:6px;font-family:Consolas,monospace}
+.tag{font-style:normal;font-family:Consolas,monospace;font-size:12px;
+  border-radius:4px;padding:1px 8px;color:#fff}
+.tag.feat{background:#15803d}.tag.fix{background:#b42318}
+.tag.refactor{background:#2f54c7}.tag.docs{background:#67707e}
+.tag.style{background:#7c3aed}.tag.perf{background:#b45309}.tag.chore{background:#475569}
+.m{font-family:Consolas,monospace;font-weight:700;font-size:12px;
+  border-radius:4px;padding:1px 7px;color:#fff}
+.m.get{background:#15803d}.m.post{background:#2f54c7}
+.m.put{background:#b45309}.m.delete{background:#b42318}.m.patch{background:#7c3aed}
+
+/* ===== 摘要卡片 ===== */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+  gap:14px;margin:6px 0 22px}
+.stat{background:var(--accent-soft);border-radius:10px;padding:14px;text-align:center}
+.stat b{display:block;font-size:24px;color:var(--accent-deep)}
+.stat span{font-size:12.5px;color:var(--muted)}
+
+/* ===== 代码块 / 目录树 ===== */
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;overflow:auto;font-size:13px;line-height:1.65;
+  font-family:Consolas,"Courier New",monospace;position:relative}
+pre.tree{background:#fbfcfe}
+.copy-btn{position:absolute;top:8px;right:8px;border:1px solid var(--line);
+  background:#fff;border-radius:6px;padding:2px 10px;font-size:12px;
+  cursor:pointer;color:var(--muted)}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent)}
+
+/* ===== 模块卡片 / 风险卡片 ===== */
+.module{border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin:14px 0;background:#fff}
+.module h3{margin:0 0 8px}
+.risk{border:1px solid var(--line);border-left-width:4px;border-radius:8px;
+  padding:14px 18px;margin:14px 0;background:#fff}
+.risk p{margin:6px 0}
+.risk.high{border-left-color:var(--danger)}
+.risk.mid{border-left-color:var(--warn)}
+.risk.low{border-left-color:var(--ok)}
+.lv{font-style:normal;font-size:12px;color:#fff;border-radius:4px;padding:1px 8px;margin-right:8px}
+.risk.high .lv{background:var(--danger)}
+.risk.mid .lv{background:var(--warn)}
+.risk.low .lv{background:var(--ok)}
+
+/* ===== 清单 / 折叠 ===== */
+.check{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;
+  border-radius:6px;cursor:pointer}
+.check:hover{background:var(--accent-soft)}
+.check input{margin-top:6px}
+details{border:1px dashed var(--line);border-radius:8px;padding:10px 16px;
+  margin-top:14px;background:#fbfcfe}
+summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px}
+
+/* ===== 思维导图（simple-mind-map 组件，BootCDN 加载） ===== */
+.mm-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.mm-btn{border:1px solid var(--line);background:#fff;border-radius:6px;
+  padding:3px 14px;font-size:12.5px;color:var(--muted);cursor:pointer}
+.mm-btn:hover{color:var(--accent);border-color:var(--accent)}
+#mindMapContainer{border:1px solid var(--line);border-radius:10px;background:#fff;
+  height:640px;overflow:hidden}
+#mindMapContainer *{margin:0;padding:0}
+#mindMapContainer .mm-loading,#mindMapContainer .mm-fallback{display:flex;
+  align-items:center;justify-content:center;height:100%;padding:30px;
+  color:var(--muted);font-size:13.5px;line-height:2.1;text-align:center}
+#mindMapContainer .mm-fallback b{color:var(--danger);font-size:14.5px}
+
+footer{text-align:center;color:var(--muted);font-size:12.5px;padding:6px 0 40px}
+
+/* ===== 响应式 ===== */
+@media(max-width:960px){
+  .layout{grid-template-columns:1fr;padding:18px}
+  .toc{display:none}
+  #mindMapContainer{height:460px}
+  section{padding:22px 18px}
+}
+
+/* ===== 打印 ===== */
+@media print{
+  body{background:#fff;font-size:12.5px}
+  .toc,.print-btn,.copy-btn{display:none!important}
+  .layout{display:block;padding:0;max-width:none}
+  section{border:none;box-shadow:none;padding:8px 0;margin-bottom:14px;
+    break-inside:avoid-page}
+  #mindMapContainer{border:none;height:auto;min-height:420px}
+  a{color:inherit}
+  .hero{border-radius:0}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="hero-kicker">项目交接文档 / HANDOVER</p>
+    <h1>（填写：项目名称）</h1>
+    <p class="hero-sub">（填写：一句话项目定位，例：面向 XX 业务的 XX 系统，含 Vue3 前端与 Spring Boot 后端）</p>
+    <div class="meta">
+      <div><span>交接日期</span><b>（填写：YYYY-MM-DD）</b></div>
+      <div><span>文档版本</span><b>v1.0</b></div>
+      <div><span>交接人</span><b>（填写：原负责人）</b></div>
+      <div><span>接手人</span><b>（填写：接手负责人）</b></div>
+      <div><span>当前分支</span><b>（填写：如 main）</b></div>
+      <div><span>最新提交</span><b>（填写：哈希 日期 说明）</b></div>
+    </div>
+    <button class="print-btn" onclick="window.print()">打印 / 导出 PDF</button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc">
+    <p>目录</p>
+    <a href="#s1">项目概述</a>
+    <a href="#s2">思维导图总览</a>
+    <a href="#s3">快速上手（环境搭建）</a>
+    <a href="#s4">工程结构与职责</a>
+    <a href="#s5">功能模块详解</a>
+    <a href="#s6">潜在风险与注意事项</a>
+    <a href="#s7">构建与部署</a>
+    <a href="#s8">接口清单</a>
+    <a href="#s9">技术栈清单</a>
+    <a href="#s10">已完成工作</a>
+    <a href="#s11">数据模型</a>
+    <a href="#s12">交接清单与附录</a>
+  </nav>
+
+  <main>
+
+  <!-- ================= 1 项目概述 ================= -->
+  <section id="s1">
+    <h2>项目概述</h2>
+    <table>
+      <tbody>
+        <tr><th style="width:130px">项目名称</th><td>（填写）</td></tr>
+        <tr><th>业务背景</th><td>（填写：这个项目解决什么问题、服务谁）</td></tr>
+        <tr><th>当前状态</th><td>（填写：如已上线生产 / UAT 验收中 / 开发中，附关键时间节点）</td></tr>
+        <tr><th>仓库地址</th><td>（填写：Git 远程地址）</td></tr>
+        <tr><th>代码规模</th><td>（填写：前后端文件数、主要语言，来自 git ls-files 统计）</td></tr>
+        <tr><th>参与人员</th><td>（填写：来自 git shortlog 的开发贡献统计，对接方分工见下方"相关人员"）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>相关人员（必填，按项目形态裁剪）</h3>
+    <p class="lead">规则：前端项目填对接的后端人员，后端项目填对接的前端人员（本项目自身角色不填）；全栈项目两者都填。</p>
+    <table>
+      <thead><tr><th style="width:170px">角色</th><th>姓名 / 方式</th><th style="width:240px">职责与备注</th></tr></thead>
+      <tbody>
+        <tr><td>产品/业务负责人</td><td>（填写：必填；代码中无法推断，向用户确认）</td><td>（填写：需求对接、业务答疑窗口）</td></tr>
+        <tr><td>项目发布人员</td><td>（填写：必填；有 CI/CD 则填"CI/CD 流水线（注明 GitLab CI / Jenkins 等平台）"；手工发布则写明途径："自发布（开发者自行构建手动部署）"或"自发布 / 可委托 XX 代发"；确无则填"无（待确认）"）</td><td>（填写：发布窗口、审批流程、发布职责是否移交）</td></tr>
+        <tr><td>前端人员</td><td>（仅后端 / 全栈项目填写：对接的前端负责人，多人全列出）</td><td>（填写：各自负责模块）</td></tr>
+        <tr><td>后端人员</td><td>（仅前端 / 全栈项目填写：对接的后端负责人）</td><td>（填写：各自负责模块）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>接手速览（五步上手）</h3>
+    <ol>
+      <li>看<b>第 2 章思维导图</b>，一分钟建立项目全貌</li>
+      <li>按<b>第 3 章快速上手</b>把项目在本地跑起来（注意版本强依赖项）</li>
+      <li>对照<b>第 4、5 章</b>走读工程结构与核心模块</li>
+      <li>走读时过一遍<b>第 6 章潜在风险</b>（项目状态与风险级别按实际情况表述）</li>
+      <li>业务与接口问题找上方"相关人员"表中的联系人</li>
+    </ol>
+  </section>
+
+  <!-- ================= 2 思维导图（simple-mind-map 组件，BootCDN） ================= -->
+  <section id="s2">
+    <h2>思维导图总览</h2>
+    <p class="lead">项目全貌一图总览：滚轮缩放、拖拽平移，点击节点左侧圆点可折叠/展开分支。</p>
+    <div class="mm-toolbar">
+      <button class="mm-btn" type="button" id="mmIn">放大 ＋</button>
+      <button class="mm-btn" type="button" id="mmOut">缩小 −</button>
+      <button class="mm-btn" type="button" id="mmFit">适应画布</button>
+      <button class="mm-btn" type="button" id="mmReset">重置视图</button>
+    </div>
+    <div id="mindMapContainer"><div class="mm-loading">正在加载思维导图组件…<br>首次打开需从 CDN 下载组件，其余章节不受影响，可继续向下阅读</div></div>
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/simple-mind-map/0.14.0/simpleMindMap.esm.min.css">
+    <script>
+/* 大纲数据：{data:{text},children:[]} 树形结构，节点顺序与章节优先级一致。
+   导图库在文档末尾以 defer 异步加载，加载慢不会阻塞本页后续章节渲染 */
+var MIND_DATA = {
+    data: { text: '（填写：项目名）' },
+    children: [
+      { data: { text: '项目概述' }, children: [
+        { data: { text: '业务定位：（填写）' } },
+        { data: { text: '状态：（填写）' } }
+      ]},
+      { data: { text: '相关人员' }, children: [
+        { data: { text: '产品/业务负责人：（填写）' } },
+        { data: { text: '发布：（填写）' } },
+        { data: { text: '对接方：（按项目形态填写）' } }
+      ]},
+      { data: { text: '快速上手' }, children: [
+        { data: { text: '（填写：如 Node 18.16.0 + npm install）' } },
+        { data: { text: '（填写：启动命令与端口）' } },
+        { data: { text: '（填写：访问路径）' } }
+      ]},
+      { data: { text: '工程结构' }, children: [
+        { data: { text: '（填写：模块数 / 组件数等规模）' } },
+        { data: { text: '（填写：请求层 / 核心目录）' } }
+      ]},
+      { data: { text: '功能模块' }, children: [
+        { data: { text: '（填写：核心模块一）' } },
+        { data: { text: '（填写：核心模块二）' } },
+        { data: { text: '（填写：核心模块三）' } }
+      ]},
+      { data: { text: '潜在风险' }, children: [
+        { data: { text: '（填写：项目状态，如"正常运行上线，无阻塞问题"）' } },
+        { data: { text: '（填写：偶发缺陷 / 注意事项 + 级别）' } }
+      ]},
+      { data: { text: '构建与部署' }, children: [
+        { data: { text: '（填写：构建命令）' } },
+        { data: { text: '（填写：产物与部署路径）' } },
+        { data: { text: '（填写：发布方式）' } }
+      ]},
+      { data: { text: '接口清单' }, children: [
+        { data: { text: '（填写：后端服务名）' } },
+        { data: { text: '（填写：域名注册位置）' } }
+      ]},
+      { data: { text: '技术栈' }, children: [
+        { data: { text: '（填写：框架与版本）' } },
+        { data: { text: '（填写：UI 库 / 图表库）' } },
+        { data: { text: '（填写：构建工具）' } }
+      ]},
+      { data: { text: '已完成工作' }, children: [
+        { data: { text: '（填写：提交总数 · 周期）' } },
+        { data: { text: '（填写：feat / fix / refactor 分布）' } }
+      ]},
+      { data: { text: '交接确认清单' } }
+    ]
+  };
+
+  /* 导图库经 CDN 异步加载，加载慢不会阻塞第 3 章及之后内容渲染；
+     本段在库就绪后绘制导图，失败/超时则显示兜底提示，避免空白 */
+  var mmContainer = document.getElementById('mindMapContainer');
+  var mmDeadline = Date.now() + 150000;
+
+  function initMindMap() {
+    var MindMap = window.simpleMindMap.default;
+    mmContainer.innerHTML = '';
+    var mm = new MindMap({
+      el: mmContainer,
+      readonly: true,
+      layout: 'logicalStructure',
+      fit: true,
+      theme: 'fresh-green',
+      themeConfig: { fontSize: 14, lineHeight: 1.4 },
+      nodeTextEditZIndex: 1000,
+      data: MIND_DATA
+    });
+    mm.on('node_tree_render_end', function () { mm.view.fit(); });
+    document.getElementById('mmIn').addEventListener('click', function () { mm.view.enlarge(); });
+    document.getElementById('mmOut').addEventListener('click', function () { mm.view.narrow(); });
+    document.getElementById('mmFit').addEventListener('click', function () { mm.view.fit(); });
+    document.getElementById('mmReset').addEventListener('click', function () { mm.view.reset(); mm.view.fit(); });
+  }
+
+  function showMindFallback() {
+    mmContainer.innerHTML = '<div class="mm-fallback"><b>思维导图组件加载超时</b><br>' +
+      '当前网络未能访问 cdn.bootcdn.net（simple-mind-map 0.14.0）。<br>' +
+      '可连接可访问该 CDN 的网络后刷新本页；其余章节不受影响，导图内容与正文各章一致。</div>';
+  }
+
+  function waitMindLib() {
+    if (window.simpleMindMap && window.simpleMindMap.default) {
+      try { initMindMap(); } catch (e) { showMindFallback(); }
+      return;
+    }
+    if (window.__mmLibFailed || Date.now() > mmDeadline) { showMindFallback(); return; }
+    setTimeout(waitMindLib, 200);
+  }
+  waitMindLib();
+    </script>
+  </section>
+
+  <!-- ================= 3 快速上手（环境搭建） ================= -->
+  <section id="s3">
+    <h2>快速上手（环境搭建）</h2>
+    <ol>
+      <li><b>前置依赖</b>：（填写：Node / JDK 版本要求，强依赖项加粗警示，例：Node.js 18.16.0（.nvmrc 已锁定，严禁使用低版本））</li>
+      <li><b>获取代码</b>：<code>git clone （填写：仓库地址）</code>，切换到（填写：分支）</li>
+      <li><b>安装依赖</b>：</li>
+    </ol>
+    <pre class="code"><code>（填写：如 npm install / pnpm install，后端如有单独安装命令一并写明）</code></pre>
+    <ol start="4">
+      <li><b>环境变量</b>：（填写：根目录配置文件清单，仅说明各键名用途，禁止写值）</li>
+      <li><b>启动开发环境</b>：</li>
+    </ol>
+    <pre class="code"><code>（填写：启动命令与默认端口，如 npm run serve  # http://localhost:4200）</code></pre>
+    <ol start="6">
+      <li><b>验证</b>：（填写：启动后如何确认成功，如页面可访问、登录正常、接口返回正常）</li>
+    </ol>
+    <details>
+      <summary>常见环境问题（踩坑记录）</summary>
+      <p>（填写：历史踩过的坑与解法，例：Node 版本不匹配导致构建 OOM，切换到 18.16.0 后恢复）</p>
+    </details>
+  </section>
+
+  <!-- ================= 4 工程结构 ================= -->
+  <section id="s4">
+    <h2>工程结构与模块职责</h2>
+    <pre class="tree">（填写：目录树，来自 git ls-files 整理，标注每个一级目录用途，例：）
+project/
+├─ src/
+│  ├─ api/          # 接口定义
+│  ├─ components/   # 公共组件
+│  ├─ views/        # 页面
+│  └─ router/       # 路由
+├─ server/          # 后端服务
+└─ package.json</pre>
+    <table>
+      <thead><tr><th style="width:220px">模块 / 目录</th><th>职责说明</th><th style="width:110px">变更热度</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">（填写：src/views）</td><td>（填写：业务页面，含 XX、XX 等模块）</td><td>（填写：128 次）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= 5 功能模块详解 ================= -->
+  <section id="s5">
+    <h2>功能模块详解</h2>
+    <!-- 每个功能模块一张卡片；前端写页面/组件，后端写服务/Controller；只写核心模块，非核心一句话带过 -->
+    <article class="module">
+      <h3>（填写：模块名，例：数据看板）</h3>
+      <p>（填写：模块职责与业务流程一句话说明）</p>
+      <ul>
+        <li>关键文件：<code>（填写：src/views/Dashboard.vue）</code></li>
+        <li>路由入口：<code>（填写：/dashboard）</code></li>
+        <li>依赖接口：（填写：调用了哪些后端接口）</li>
+        <li>注意事项：（填写：交接后维护此模块需要知道的点）</li>
+      </ul>
+    </article>
+    <article class="module">
+      <h3>（填写：模块二）</h3>
+      <p>（填写）</p>
+    </article>
+  </section>
+
+  <!-- ================= 6 潜在风险与注意事项 =================
+       定性规则（SKILL.md 第 3 步"风险定性以用户口径为准"）：
+       先确认项目运行状态——正常运行上线的项目，章节用"潜在风险与注意事项"，
+       章首 lead 明示"正常运行上线、无阻塞性遗留问题"；偶发缺陷（有兜底、未触发）
+       标 mid 不标 high；确有阻塞问题才允许 high 并按严重度排最前 -->
+  <section id="s6">
+    <h2>潜在风险与注意事项</h2>
+    <!-- 每个问题一张卡片，级别用 high / mid / low -->
+    <div class="risk high">
+      <div><i class="lv">高</i><b>（填写：问题标题；仅限真正阻塞使用的问题，定级前先与用户确认项目状态）</b></div>
+      <p><b>现象：</b>（填写：报错或异常表现）</p>
+      <p><b>定位：</b>（填写：代码位置与根因分析）</p>
+      <p><b>建议：</b>（填写：给接手人的处理建议）</p>
+    </div>
+    <div class="risk mid">
+      <div><i class="lv">中</i><b>（填写）</b></div>
+      <p>（填写）</p>
+    </div>
+    <div class="risk low">
+      <div><i class="lv">低</i><b>（填写）</b></div>
+      <p>（填写）</p>
+    </div>
+  </section>
+
+  <!-- ================= 7 构建与部署 ================= -->
+  <section id="s7">
+    <h2>构建与部署</h2>
+    <pre class="code"><code>（填写：构建命令，例：）
+pnpm build          # 前端构建，产物 dist/
+mvn clean package   # 后端打包，产物 target/xx.jar</code></pre>
+    <table>
+      <thead><tr><th style="width:110px">环境</th><th style="width:180px">配置文件</th><th>构建命令</th><th>产物 / 部署位置</th></tr></thead>
+      <tbody>
+        <tr><td>开发</td><td class="mono">.env.development</td><td>（填写）</td><td>（填写）</td></tr>
+        <tr><td>测试 / UAT</td><td class="mono">.env.uat</td><td>（填写）</td><td>（填写）</td></tr>
+        <tr><td>生产</td><td class="mono">.env.production</td><td>（填写）</td><td>（填写）</td></tr>
+      </tbody>
+    </table>
+    <h3>部署要点</h3>
+    <ul>
+      <li>（填写：Nginx 配置要点，如子路径 /dl-pdm/ 的 base 与 location 规则）</li>
+      <li>（填写：Docker / 服务器 / 端口 / 域名等部署信息）</li>
+      <li>（填写：发布流程与回滚方式）</li>
+    </ul>
+  </section>
+
+  <!-- ================= 8 接口清单 ================= -->
+  <section id="s8">
+    <h2>接口清单</h2>
+    <table>
+      <thead><tr><th style="width:70px">方法</th><th style="width:260px">路径</th><th>用途</th><th style="width:150px">备注</th></tr></thead>
+      <tbody>
+        <tr><td><span class="m get">GET</span></td><td class="mono">/api/（填写）</td><td>（填写：查询 XX 列表）</td><td>（填写：分页参数等）</td></tr>
+        <tr><td><span class="m post">POST</span></td><td class="mono">/api/（填写）</td><td>（填写）</td><td>（填写）</td></tr>
+      </tbody>
+    </table>
+    <p class="lead">（填写：接口统一返回结构、鉴权方式、错误码约定等补充说明）</p>
+  </section>
+
+  <!-- ================= 9 技术栈清单 ================= -->
+  <section id="s9">
+    <h2>技术栈清单</h2>
+
+    <h3>前端</h3>
+    <div class="chips">
+      <span class="chip"><b>vue</b>（填写：3.5.44）</span>
+      <span class="chip"><b>vite</b>（填写：8.3.5）</span>
+      <span class="chip"><b>typescript</b>（填写：5.9.3）</span>
+    </div>
+    <table>
+      <thead><tr><th style="width:200px">依赖</th><th style="width:120px">精确版本</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">（填写：pinia）</td><td>（填写：4.1.0）</td><td>（填写：全局状态管理）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>后端</h3>
+    <div class="chips">
+      <span class="chip"><b>java</b>（填写：17）</span>
+      <span class="chip"><b>spring-boot</b>（填写：3.2.x）</span>
+    </div>
+    <table>
+      <thead><tr><th style="width:200px">依赖</th><th style="width:120px">精确版本</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">（填写）</td><td>（填写）</td><td>（填写）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>数据与中间件</h3>
+    <table>
+      <thead><tr><th style="width:160px">组件</th><th style="width:120px">版本</th><th>用途 / 部署位置</th></tr></thead>
+      <tbody>
+        <tr><td>（填写：MySQL）</td><td>（填写：8.0.x）</td><td>（填写：业务库，部署于 XX）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= 10 已完成工作 ================= -->
+  <section id="s10">
+    <h2>已完成工作</h2>
+    <p class="lead">归纳自 Git 提交历史与项目文档，此处只保留<b>主干工作</b>；完整明细用 <code>git log --oneline</code> 查看。</p>
+
+    <div class="stats">
+      <div class="stat"><b>（填写：218）</b><span>有效提交数</span></div>
+      <div class="stat"><b>（填写：8 个月）</b><span>开发周期</span></div>
+      <div class="stat"><b>（填写：6）</b><span>功能模块</span></div>
+      <div class="stat"><b>（填写：2）</b><span>参与人数</span></div>
+    </div>
+
+    <!-- 主干工作一览：一张总表按功能域归组，禁止罗列琐碎逐条提交明细 -->
+    <h3>主干工作一览（按功能域）</h3>
+    <table>
+      <thead><tr><th style="width:150px">功能域</th><th>主要工作</th><th style="width:100px">类型</th><th style="width:110px">依据</th></tr></thead>
+      <tbody>
+        <tr><td>（填写：用户与权限）</td><td>（填写：登录鉴权、角色路由守卫等主干描述）</td><td><i class="tag feat">feat</i></td><td class="mono">a1b2c3d</td></tr>
+        <tr><td>（填写：数据看板）</td><td>（填写）</td><td><i class="tag feat">feat</i></td><td class="mono">记录.md §2</td></tr>
+        <tr><td>（填写：性能优化）</td><td>（填写）</td><td><i class="tag perf">perf</i></td><td class="mono">e4f5a6b</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= 11 数据模型 =================
+       纯前端项目无本地数据模型时：整章删除（含目录 nav 条目与后续章节号顺延），
+       关键业务字段口径并入接口清单末尾一句话说明 -->
+  <section id="s11">
+    <h2>数据模型</h2>
+    <p class="lead">仅交接表结构，不含业务数据。</p>
+    <table>
+      <thead><tr><th style="width:200px">表 / 实体</th><th>关键字段</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">（填写：t_order）</td><td>（填写：id, order_no, status, created_at）</td><td>（填写：订单主表，status 枚举见代码）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= 12 交接清单与附录 ================= -->
+  <section id="s12">
+    <h2>交接确认清单</h2>
+    <h3>代码与仓库</h3>
+    <label class="check"><input type="checkbox">仓库地址、分支策略与权限已交接</label>
+    <label class="check"><input type="checkbox">本地可成功安装依赖并启动项目</label>
+    <label class="check"><input type="checkbox">核心模块代码已走读</label>
+    <h3>环境与配置</h3>
+    <label class="check"><input type="checkbox">各环境变量键名与获取方式已说明（值线下提供）</label>
+    <label class="check"><input type="checkbox">服务器、数据库、中间件访问权限已申请</label>
+    <label class="check"><input type="checkbox">构建与发布流程已实际操作一次</label>
+    <h3>业务与文档</h3>
+    <label class="check"><input type="checkbox">相关人员（产品/发布/对接方）已按项目形态确认齐全</label>
+    <label class="check"><input type="checkbox">潜在风险与注意事项已逐条知晓（运行状态与风险级别已确认）</label>
+    <label class="check"><input type="checkbox">相关业务方 / 联系人已同步</label>
+
+    <h3>附录 A：常用命令速查（与构建部署章重复时整节省略，仅保留其未覆盖的命令，例：git 完整路径、测试命令）</h3>
+    <pre class="code"><code>（填写：日常开发高频命令：启动 / 构建 / 测试 / lint 等）</code></pre>
+    <h3>附录 B：联系人与文档索引</h3>
+    <table>
+      <thead><tr><th style="width:160px">名称</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>（填写：原负责人）</td><td>（填写：联系方式 / 交接后答疑窗口期）</td></tr>
+        <tr><td class="mono">README.md</td><td>（填写：工程说明——环境要求、构建命令、项目结构、登录流程、部署路径；若其关键信息已引入正文章节，此处注明"已引入第 X、Y 章，原文可作交叉核对"）</td></tr>
+        <tr><td>（填写：记录.md）</td><td>（填写：开发过程台账）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  </main>
+</div>
+
+<footer>本文档由 handover-doc 技能基于 Git 历史与本地文件生成 · 生成时间（填写：YYYY-MM-DD HH:mm）</footer>
+
+<script>
+// 目录滚动高亮
+const links = [...document.querySelectorAll('.toc a')];
+const secMap = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(a => a.classList.remove('active'));
+      const a = secMap.get(e.target.id);
+      if (a) a.classList.add('active');
+    }
+  });
+}, { rootMargin: '-15% 0px -70% 0px' });
+document.querySelectorAll('main section[id]').forEach(s => io.observe(s));
+
+// 代码块一键复制
+document.querySelectorAll('pre.code').forEach(pre => {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn'; btn.type = 'button'; btn.textContent = '复制';
+  btn.addEventListener('click', async () => {
+    const code = pre.querySelector('code');
+    if (!code) return;
+    try { await navigator.clipboard.writeText(code.innerText); btn.textContent = '已复制'; }
+    catch (e) { btn.textContent = '复制失败'; }
+    setTimeout(() => btn.textContent = '复制', 1600);
+  });
+  pre.appendChild(btn);
+});
+</script>
+
+<!-- 导图库异步加载：defer 不阻塞 HTML 解析，全部章节内容先渲染，库就绪后再绘制导图 -->
+<script defer src="https://cdn.bootcdn.net/ajax/libs/simple-mind-map/0.14.0/simpleMindMap.umd.min.js" onerror="window.__mmLibFailed=true"></script>
+</body>
+</html>
